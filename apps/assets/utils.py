@@ -1,25 +1,32 @@
 # ~*~ coding: utf-8 ~*~
 #
-from collections import defaultdict
-from functools import reduce
-import operator
-
-from django.db.models import Q
+import os
+import paramiko
+from paramiko.ssh_exception import SSHException
 
 from common.utils import get_object_or_none
 from .models import Asset, SystemUser, Label
 
 
 def get_assets_by_id_list(id_list):
-    return Asset.objects.filter(id__in=id_list)
+    return Asset.objects.filter(id__in=id_list).filter(is_active=True)
 
 
-def get_assets_by_hostname_list(hostname_list):
-    return Asset.objects.filter(hostname__in=hostname_list)
+def get_system_users_by_id_list(id_list):
+    return SystemUser.objects.filter(id__in=id_list)
+
+
+def get_assets_by_fullname_list(hostname_list):
+    return Asset.get_queryset_by_fullname_list(hostname_list)
 
 
 def get_system_user_by_name(name):
     system_user = get_object_or_none(SystemUser, name=name)
+    return system_user
+
+
+def get_system_user_by_id(id):
+    system_user = get_object_or_none(SystemUser, id=id)
     return system_user
 
 
@@ -42,7 +49,3 @@ class LabelFilter:
             for kwargs in conditions:
                 queryset = queryset.filter(**kwargs)
         return queryset
-
-
-
-

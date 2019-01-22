@@ -3,19 +3,23 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from ..models import Asset, AdminUser
 from common.utils import get_logger
+from orgs.mixins import OrgModelForm
+
+from ..models import Asset, AdminUser
+
 
 logger = get_logger(__file__)
 __all__ = ['AssetCreateForm', 'AssetUpdateForm', 'AssetBulkUpdateForm']
 
 
-class AssetCreateForm(forms.ModelForm):
+class AssetCreateForm(OrgModelForm):
     class Meta:
         model = Asset
         fields = [
             'hostname', 'ip', 'public_ip', 'port',  'comment',
             'nodes', 'is_active', 'admin_user', 'labels', 'platform',
+            'domain', 'protocol',
 
         ]
         widgets = {
@@ -26,57 +30,65 @@ class AssetCreateForm(forms.ModelForm):
                 'class': 'select2', 'data-placeholder': _('Admin user')
             }),
             'labels': forms.SelectMultiple(attrs={
-                'class': 'select2', 'data-placeholder': _('Labels')
+                'class': 'select2', 'data-placeholder': _('Label')
             }),
             'port': forms.TextInput(),
+            'domain': forms.Select(attrs={
+                'class': 'select2', 'data-placeholder': _('Domain')
+            }),
+        }
+        labels = {
+            'nodes': _("Node"),
         }
         help_texts = {
-            'hostname': '* required',
-            'ip': '* required',
-            'port': '* required',
             'admin_user': _(
                 'root or other NOPASSWD sudo privilege user existed in asset,'
                 'If asset is windows or other set any one, more see admin user left menu'
             ),
-            'platform': _("* required Must set exact system platform, Windows, Linux ...")
+            'platform': _("Windows 2016 RDP protocol is different, If is window 2016, set it"),
+            'domain': _("If your have some network not connect with each other, you can set domain")
         }
 
 
-class AssetUpdateForm(forms.ModelForm):
+class AssetUpdateForm(OrgModelForm):
     class Meta:
         model = Asset
         fields = [
             'hostname', 'ip', 'port', 'nodes',  'is_active', 'platform',
             'public_ip', 'number', 'comment', 'admin_user', 'labels',
+            'domain', 'protocol',
         ]
         widgets = {
             'nodes': forms.SelectMultiple(attrs={
-                'class': 'select2', 'data-placeholder': _('Nodes')
+                'class': 'select2', 'data-placeholder': _('Node')
             }),
             'admin_user': forms.Select(attrs={
                 'class': 'select2', 'data-placeholder': _('Admin user')
             }),
             'labels': forms.SelectMultiple(attrs={
-                'class': 'select2', 'data-placeholder': _('Labels')
+                'class': 'select2', 'data-placeholder': _('Label')
             }),
             'port': forms.TextInput(),
+            'domain': forms.Select(attrs={
+                'class': 'select2', 'data-placeholder': _('Domain')
+            }),
+        }
+        labels = {
+            'nodes': _("Node"),
         }
         help_texts = {
-            'hostname': '* required',
-            'ip': '* required',
-            'port': '* required',
-            'cluster': '* required',
             'admin_user': _(
                 'root or other NOPASSWD sudo privilege user existed in asset,'
                 'If asset is windows or other set any one, more see admin user left menu'
             ),
-            'platform': _("* required Must set exact system platform, Windows, Linux ...")
+            'platform': _("Windows 2016 RDP protocol is different, If is window 2016, set it"),
+            'domain': _("If your have some network not connect with each other, you can set domain")
         }
 
 
-class AssetBulkUpdateForm(forms.ModelForm):
+class AssetBulkUpdateForm(OrgModelForm):
     assets = forms.ModelMultipleChoiceField(
-        required=True, help_text='* required',
+        required=True,
         label=_('Select assets'), queryset=Asset.objects.all(),
         widget=forms.SelectMultiple(
             attrs={
@@ -89,7 +101,7 @@ class AssetBulkUpdateForm(forms.ModelForm):
         label=_('Port'), required=False, min_value=1, max_value=65535,
     )
     admin_user = forms.ModelChoiceField(
-        required=False, queryset=AdminUser.objects.all(),
+        required=False, queryset=AdminUser.objects,
         label=_("Admin user"),
         widget=forms.Select(
             attrs={
@@ -106,10 +118,10 @@ class AssetBulkUpdateForm(forms.ModelForm):
         ]
         widgets = {
             'labels': forms.SelectMultiple(
-                attrs={'class': 'select2', 'data-placeholder': _('Select labels')}
+                attrs={'class': 'select2', 'data-placeholder': _('Label')}
             ),
             'nodes': forms.SelectMultiple(
-                attrs={'class': 'select2', 'data-placeholder': _('Select nodes')}
+                attrs={'class': 'select2', 'data-placeholder': _('Node')}
             ),
         }
 
@@ -123,14 +135,14 @@ class AssetBulkUpdateForm(forms.ModelForm):
                         if k in changed_fields}
         assets = cleaned_data.pop('assets')
         labels = cleaned_data.pop('labels', [])
-        nodes = cleaned_data.pop('nodes')
+        nodes = cleaned_data.pop('nodes', None)
         assets = Asset.objects.filter(id__in=[asset.id for asset in assets])
         assets.update(**cleaned_data)
 
         if labels:
-            for label in labels:
-                label.assets.add(*tuple(assets))
+            for asset in assets:
+                asset.labels.set(labels)
         if nodes:
-            for node in nodes:
-                node.assets.add(*tuple(assets))
+            for asset in assets:
+                asset.nodes.set(nodes)
         return assets

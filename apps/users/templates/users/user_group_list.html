@@ -58,7 +58,8 @@ $(document).ready(function() {
         order: [],
         op_html: $('#actions').html()
     };
-    jumpserver.initDataTable(options);
+    jumpserver.initServerSideDataTable(options);
+
 }).on('click', '.btn_delete_user_group', function(){
     var $this = $(this);
     var group_id = $this.data('gid');
@@ -82,6 +83,7 @@ $(document).ready(function() {
             text: "{% trans 'This will delete the selected groups !!!' %}",
             type: "warning",
             showCancelButton: true,
+            cancelButtonText: "{% trans 'Cancel' %}",
             confirmButtonColor: "#DD6B55",
             confirmButtonText: "{% trans 'Confirm' %}",
             closeOnConfirm: false

@@ -4,9 +4,10 @@
 import uuid
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
+from orgs.mixins import OrgModelMixin
 
 
-class Label(models.Model):
+class Label(OrgModelMixin):
     SYSTEM_CATEGORY = "S"
     USER_CATEGORY = "U"
     CATEGORY_CHOICES = (
@@ -16,7 +17,8 @@ class Label(models.Model):
     id = models.UUIDField(default=uuid.uuid4, primary_key=True)
     name = models.CharField(max_length=128, verbose_name=_("Name"))
     value = models.CharField(max_length=128, verbose_name=_("Value"))
-    category = models.CharField(max_length=128, choices=CATEGORY_CHOICES, default=USER_CATEGORY, verbose_name=_("Category"))
+    category = models.CharField(max_length=128, choices=CATEGORY_CHOICES,
+                                default=USER_CATEGORY, verbose_name=_("Category"))
     is_active = models.BooleanField(default=True, verbose_name=_("Is active"))
     comment = models.TextField(blank=True, null=True, verbose_name=_("Comment"))
     date_created = models.DateTimeField(
@@ -34,4 +36,4 @@ class Label(models.Model):
 
     class Meta:
         db_table = "assets_label"
-        unique_together = ('name', 'value')
+        unique_together = [('name', 'value', 'org_id')]

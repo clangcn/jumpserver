@@ -2,14 +2,18 @@
 #
 import json
 
+from django.db import models
 from django import forms
 from django.utils import six
 from django.core.exceptions import ValidationError
 from django.utils.translation import ugettext as _
 from rest_framework import serializers
+from .utils import get_signer
+
+signer = get_signer()
 
 
-class DictField(forms.Field):
+class FormDictField(forms.Field):
     widget = forms.Textarea
 
     def to_python(self, value):
@@ -19,6 +23,7 @@ class DictField(forms.Field):
         # RadioSelect will provide. Because bool("True") == bool('1') == True,
         # we don't need to handle that explicitly.
         if isinstance(value, six.string_types):
+            value = value.replace("'", '"')
             try:
                 value = json.loads(value)
                 return value
@@ -43,3 +48,59 @@ class StringIDField(serializers.Field):
     def to_representation(self, value):
         return {"pk": value.pk, "name": value.__str__()}
 
+
+class StringManyToManyField(serializers.RelatedField):
+    def to_representation(self, value):
+        return value.__str__()
+
+
+class EncryptMixin:
+    def from_db_value(self, value, expression, connection, context):
+        if value is not None:
+            return signer.unsign(value)
+        return super().from_db_value(self, value, expression, connection, context)
+
+    def get_prep_value(self, value):
+        if value is None:
+            return value
+        return signer.sign(value)
+
+
+class EncryptTextField(EncryptMixin, models.TextField):
+    description = _("Encrypt field using Secret Key")
+
+
+class EncryptCharField(EncryptMixin, models.CharField):
+    def __init__(self, *args, **kwargs):
+        kwargs['max_length'] = 2048
+        super().__init__(*args, **kwargs)
+
+
+class FormEncryptMixin:
+    pass
+
+
+class FormEncryptCharField(FormEncryptMixin, forms.CharField):
+    pass
+
+
+class FormEncryptDictField(FormEncryptMixin, FormDictField):
+    pass
+
+
+class ChoiceDisplayField(serializers.ChoiceField):
+    def __init__(self, *args, **kwargs):
+        super(ChoiceDisplayField, self).__init__(*args, **kwargs)
+        self.choice_strings_to_display = {
+            six.text_type(key): value for key, value in self.choices.items()
+        }
+
+    def to_representation(self, value):
+        if value is None:
+            return value
+        return {
+            'value': self.choice_strings_to_values.get(six.text_type(value),
+                                                       value),
+            'display': self.choice_strings_to_display.get(six.text_type(value),
+                                                          value),
+        }

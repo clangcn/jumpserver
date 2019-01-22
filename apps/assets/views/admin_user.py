@@ -11,7 +11,7 @@ from django.views.generic.detail import DetailView, SingleObjectMixin
 from common.const import create_success_msg, update_success_msg
 from .. import forms
 from ..models import AdminUser, Node
-from ..hands import AdminUserRequiredMixin
+from common.permissions import AdminUserRequiredMixin
 
 __all__ = [
     'AdminUserCreateView', 'AdminUserDetailView',
@@ -102,7 +102,7 @@ class AdminUserAssetsView(AdminUserRequiredMixin, SingleObjectMixin, ListView):
             'app': _('Assets'),
             'action': _('Admin user detail'),
             "total_amount": len(self.queryset),
-            'unreachable_amount': len([asset for asset in self.queryset if asset.is_connective is False])
+            'unreachable_amount': len([asset for asset in self.queryset if asset.connectivity is False])
         }
         kwargs.update(context)
         return super().get_context_data(**kwargs)

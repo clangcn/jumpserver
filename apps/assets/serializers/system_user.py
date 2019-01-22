@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from ..models import SystemUser
+from ..models import SystemUser, Asset
+from .base import AuthSerializer
 
 
 class SystemUserSerializer(serializers.ModelSerializer):
@@ -17,13 +18,20 @@ class SystemUserSerializer(serializers.ModelSerializer):
         model = SystemUser
         exclude = ('_password', '_private_key', '_public_key')
 
+    def get_field_names(self, declared_fields, info):
+        fields = super(SystemUserSerializer, self).get_field_names(declared_fields, info)
+        fields.extend([
+            'login_mode_display',
+        ])
+        return fields
+
     @staticmethod
     def get_unreachable_assets(obj):
-        return obj.unreachable_assets
+        return obj.assets_unreachable
 
     @staticmethod
     def get_reachable_assets(obj):
-        return obj.reachable_assets
+        return obj.assets_reachable
 
     def get_unreachable_amount(self, obj):
         return len(self.get_unreachable_assets(obj))
@@ -33,21 +41,19 @@ class SystemUserSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_assets_amount(obj):
-        return len(obj.assets)
+        return len(obj.get_related_assets())
 
 
-class SystemUserAuthSerializer(serializers.ModelSerializer):
+class SystemUserAuthSerializer(AuthSerializer):
     """
     系统用户认证信息
     """
-    password = serializers.CharField(max_length=1024)
-    private_key = serializers.CharField(max_length=4096)
 
     class Meta:
         model = SystemUser
         fields = [
             "id", "name", "username", "protocol",
-            "password", "private_key",
+            "login_mode", "password", "private_key",
         ]
 
 
@@ -57,7 +63,10 @@ class AssetSystemUserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = SystemUser
-        fields = ('id', 'name', 'username', 'priority', 'protocol',  'comment',)
+        fields = (
+            'id', 'name', 'username', 'priority',
+            'protocol',  'comment', 'login_mode'
+        )
 
 
 class SystemUserSimpleSerializer(serializers.ModelSerializer):
@@ -67,3 +76,6 @@ class SystemUserSimpleSerializer(serializers.ModelSerializer):
     class Meta:
         model = SystemUser
         fields = ('id', 'name', 'username')
+
+
+

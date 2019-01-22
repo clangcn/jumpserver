@@ -21,7 +21,7 @@ class CommandStore(CommandBase):
             user=command["user"], asset=command["asset"],
             system_user=command["system_user"], input=command["input"],
             output=command["output"], session=command["session"],
-            timestamp=command["timestamp"]
+            org_id=command["org_id"], timestamp=command["timestamp"]
         )
 
     def bulk_save(self, commands):
@@ -33,7 +33,7 @@ class CommandStore(CommandBase):
             _commands.append(self.model(
                 user=c["user"], asset=c["asset"], system_user=c["system_user"],
                 input=c["input"], output=c["output"], session=c["session"],
-                timestamp=c["timestamp"]
+                org_id=c["org_id"], timestamp=c["timestamp"]
             ))
         return self.model.objects.bulk_create(_commands)
 
@@ -73,11 +73,11 @@ class CommandStore(CommandBase):
             session=session,
         )
         queryset = self.model.objects.filter(**filter_kwargs)
-        return [command.to_dict() for command in queryset]
+        return queryset
 
     def count(self, date_from=None, date_to=None,
-               user=None, asset=None, system_user=None,
-               input=None, session=None):
+              user=None, asset=None, system_user=None,
+              input=None, session=None):
         filter_kwargs = self.make_filter_kwargs(
             date_from=date_from, date_to=date_to, user=user,
             asset=asset, system_user=system_user, input=input,

@@ -100,3 +100,24 @@ def is_bool_field(field):
 @register.filter
 def to_dict(data):
     return dict(data)
+
+
+@register.filter
+def sort(data):
+    print(data)
+    return sorted(data)
+
+
+@register.filter
+def subtract(value, arg):
+    return value - arg
+
+
+@register.filter
+def state_show(state):
+    success = '<i class ="fa fa-check text-navy"> </i>'
+    failed = '<i class ="fa fa-times text-danger"> </i>'
+    if state:
+        return success
+    else:
+        return failed

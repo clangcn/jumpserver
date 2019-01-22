@@ -4,12 +4,12 @@ import uuid
 from django.db import models, IntegrityError
 from django.utils.translation import ugettext_lazy as _
 
-from common.mixins import NoDeleteModelMixin
+from orgs.mixins import OrgModelMixin
 
 __all__ = ['UserGroup']
 
 
-class UserGroup(NoDeleteModelMixin):
+class UserGroup(OrgModelMixin):
     id = models.UUIDField(default=uuid.uuid4, primary_key=True)
     name = models.CharField(max_length=128, verbose_name=_('Name'))
     comment = models.TextField(blank=True, verbose_name=_('Comment'))
@@ -22,6 +22,7 @@ class UserGroup(NoDeleteModelMixin):
 
     class Meta:
         ordering = ['name']
+        unique_together = [('org_id', 'name'),]
         verbose_name = _("User group")
 
     @classmethod

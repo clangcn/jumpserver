@@ -10,17 +10,17 @@ from django.urls import reverse_lazy, reverse
 from common.mixins import JSONResponseMixin
 from ..models import Terminal
 from ..forms import TerminalForm
-from ..hands import AdminUserRequiredMixin
+from common.permissions import SuperUserRequiredMixin
 
 
 __all__ = [
     "TerminalListView", "TerminalUpdateView", "TerminalDetailView",
     "TerminalDeleteView", "TerminalConnectView", "TerminalAcceptView",
-    "WebTerminalView",
+    "WebTerminalView", 'WebSFTPView',
 ]
 
 
-class TerminalListView(AdminUserRequiredMixin, ListView):
+class TerminalListView(SuperUserRequiredMixin, ListView):
     model = Terminal
     template_name = 'terminal/terminal_list.html'
     form_class = TerminalForm
@@ -35,7 +35,7 @@ class TerminalListView(AdminUserRequiredMixin, ListView):
         return context
 
 
-class TerminalUpdateView(AdminUserRequiredMixin, UpdateView):
+class TerminalUpdateView(SuperUserRequiredMixin, UpdateView):
     model = Terminal
     form_class = TerminalForm
     template_name = 'terminal/terminal_update.html'
@@ -47,7 +47,7 @@ class TerminalUpdateView(AdminUserRequiredMixin, UpdateView):
         return context
 
 
-class TerminalDetailView(LoginRequiredMixin, DetailView):
+class TerminalDetailView(LoginRequiredMixin, SuperUserRequiredMixin, DetailView):
     model = Terminal
     template_name = 'terminal/terminal_detail.html'
     context_object_name = 'terminal'
@@ -61,13 +61,13 @@ class TerminalDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class TerminalDeleteView(AdminUserRequiredMixin, DeleteView):
+class TerminalDeleteView(SuperUserRequiredMixin, DeleteView):
     model = Terminal
     template_name = 'delete_confirm.html'
     success_url = reverse_lazy('terminal:terminal-list')
 
 
-class TerminalAcceptView(AdminUserRequiredMixin, JSONResponseMixin, UpdateView):
+class TerminalAcceptView(SuperUserRequiredMixin, JSONResponseMixin, UpdateView):
     model = Terminal
     form_class = TerminalForm
     template_name = 'terminal/terminal_modal_accept.html'
@@ -92,7 +92,10 @@ class TerminalAcceptView(AdminUserRequiredMixin, JSONResponseMixin, UpdateView):
         return self.render_json_response(data)
 
 
-class TerminalConnectView(LoginRequiredMixin, DetailView):
+class TerminalConnectView(LoginRequiredMixin, SuperUserRequiredMixin, DetailView):
+    """
+    Abandon
+    """
     template_name = 'flash_message_standalone.html'
     model = Terminal
 
@@ -121,3 +124,8 @@ class TerminalConnectView(LoginRequiredMixin, DetailView):
 class WebTerminalView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         return redirect('/luna/?' + request.GET.urlencode())
+
+
+class WebSFTPView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        return redirect('/coco/elfinder/sftp/?' + request.GET.urlencode())

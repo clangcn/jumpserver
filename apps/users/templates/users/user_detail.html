@@ -87,10 +87,22 @@
                                             <td>{% trans 'Role' %}:</td>
                                             <td><b>{{ user_object.get_role_display }}</b></td>
                                         </tr>
-{#                                        <tr>#}
-{#                                            <td>{% trans 'Enable OTP' %}:</td>#}
-{#                                            <td><b>{{ user_object.enable_otp|yesno:"Yes,No,Unknown"}}</b></td>#}
-{#                                        </tr>#}
+                                        <tr>
+                                            <td>{% trans 'MFA certification' %}:</td>
+                                            <td><b>
+                                                {% if user_object.otp_force_enabled %}
+                                                    {% trans 'Force enabled' %}
+                                                {% elif  user_object.otp_enabled%}
+                                                    {% trans 'Enabled' %}
+                                                {% else %}
+                                                    {% trans 'Disabled' %}
+                                                {% endif %}
+                                            </b></td>
+                                        </tr>
+                                        <tr>
+                                            <td>{% trans 'Source' %}:</td>
+                                            <td><b>{{ user_object.get_source_display }}</b></td>
+                                        </tr>
                                         <tr>
                                             <td>{% trans 'Date expired' %}:</td>
                                             <td><b>{{ user_object.date_expired|date:"Y-m-j H:i:s" }}</b></td>
@@ -106,6 +118,10 @@
                                         <tr>
                                             <td>{% trans 'Last login' %}:</td>
                                             <td><b>{{ user_object.last_login|date:"Y-m-j H:i:s" }}</b></td>
+                                        </tr>
+                                        <tr>
+                                            <td>{% trans 'Last password updated' %}:</td>
+                                            <td><b>{{ user_object.date_password_last_updated|date:"Y-m-j H:i:s" }}</b></td>
                                         </tr>
                                         <tr>
                                             <td>{% trans 'Comment' %}:</td>
@@ -138,21 +154,30 @@
                                                 </div>
                                             </span></td>
                                         </tr>
-{#                                        <tr>#}
-{#                                          <td>{% trans 'Enable OTP' %}:</td>#}
-{#                                            <td><span class="pull-right">#}
-{#                                                <div class="switch">#}
-{#                                                    <div class="onoffswitch">#}
-{#                                                        <input type="checkbox" class="onoffswitch-checkbox" {% if user_object.enable_otp %} checked {% endif %}#}
-{#                                                               id="enable_otp">#}
-{#                                                        <label class="onoffswitch-label" for="enable_otp">#}
-{#                                                            <span class="onoffswitch-inner"></span>#}
-{#                                                            <span class="onoffswitch-switch"></span>#}
-{#                                                        </label>#}
-{#                                                    </div>#}
-{#                                                </div>#}
-{#                                            </span></td>#}
-{#                                        </tr>#}
+                                        <tr>
+                                          <td>{% trans 'Force enabled MFA' %}:</td>
+                                            <td><span class="pull-right">
+                                                <div class="switch">
+                                                    <div class="onoffswitch">
+                                                        <input type="checkbox" class="onoffswitch-checkbox" {% if user_object.otp_force_enabled %} checked {% endif %}
+                                                               id="force_enable_otp">
+                                                        <label class="onoffswitch-label" for="force_enable_otp">
+                                                            <span class="onoffswitch-inner"></span>
+                                                            <span class="onoffswitch-switch"></span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </span></td>
+                                        </tr>
+                                        <tr>
+                                            <td>{% trans 'Reset MFA' %}:</td>
+                                            <td>
+                                                <span class="pull-right">
+                                                    <button type="button" class="btn btn-primary btn-xs" id="btn-reset-mfa" style="width: 54px">{% trans 'Reset' %}</button>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {% if user_object.can_update_password %}
                                         <tr>
                                             <td>{% trans 'Send reset password mail' %}:</td>
                                             <td>
@@ -161,11 +186,20 @@
                                                 </span>
                                             </td>
                                         </tr>
+                                        {% endif %}
                                         <tr>
                                             <td>{% trans 'Send reset ssh key mail' %}:</td>
                                             <td>
                                                 <span class="pull-right">
                                                     <button type="button" class="btn btn-primary btn-xs" {% if request.user == user_object %} disabled="disabled" {% endif %} id="btn-reset-pk" style="width: 54px;">{% trans 'Send' %}</button>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr style="{% if not unblock %}display:none{% endif %}">
+                                            <td>{% trans 'Unblock user' %}</td>
+                                            <td>
+                                                <span class="pull-right">
+                                                    <button type="button" class="btn btn-primary btn-xs"  id="btn-unblock-user" style="width: 54px">{% trans 'Unblock' %}</button>
                                                 </span>
                                             </td>
                                         </tr>
@@ -262,7 +296,7 @@ $(document).ready(function() {
         .on('select2:unselect', function(evt) {
             var data = evt.params.data;
             delete jumpserver.nodes_selected[data.id];
-        })
+        });
 })
 .on('click', '#is_active', function() {
     var the_url = "{% url 'api-users:user-detail' pk=user_object.id %}";
@@ -277,19 +311,33 @@ $(document).ready(function() {
         success_message: success
     });
 })
-{#.on('click', '#enable_otp', function() {#}
-{#    var the_url = "{% url 'api-users:user-detail' pk=user_object.id %}";#}
-{#    var checked = $(this).prop('checked');#}
-{#    var body = {#}
-{#        'enable_otp': checked#}
-{#    };#}
-{#    var success = '{% trans "Update successfully!" %}';#}
-{#    APIUpdateAttr({#}
-{#        url: the_url,#}
-{#        body: JSON.stringify(body),#}
-{#        success_message: success#}
-{#    });#}
-{# });#}
+.on('click', '#force_enable_otp', function() {
+    {% if request.user == user_object %}
+        toastr.error("{% trans 'Goto profile page enable MFA' %}");
+        return;
+    {% endif %}
+
+    var the_url = "{% url 'api-users:user-detail' pk=user_object.id %}";
+    var checked = $(this).prop('checked');
+    var otp_level;
+    var otp_secret_key;
+    if(checked){
+        otp_level = 2
+    }else{
+        otp_level = 0;
+        otp_secret_key = '';
+    }
+    var body = {
+        'otp_level': otp_level,
+        'otp_secret_key': otp_secret_key
+    };
+    var success = '{% trans "Update successfully!" %}';
+    APIUpdateAttr({
+        url: the_url,
+        body: JSON.stringify(body),
+        success_message: success
+    });
+ })
 .on('click', '#btn_join_group', function() {
     if (Object.keys(jumpserver.nodes_selected).length === 0) {
         return false;
@@ -321,7 +369,7 @@ $(document).ready(function() {
         var the_url = '{% url "api-users:user-reset-password" pk=user_object.id %}';
         var body = {};
         var success = function() {
-            var msg = "{% trans "An e-mail has been sent to the user\'s mailbox." %}";
+            var msg = "{% trans "An e-mail has been sent to the user`s mailbox." %}";
             swal("{% trans 'Reset password' %}", msg, "success");
         };
         APIUpdateAttr({
@@ -335,6 +383,7 @@ $(document).ready(function() {
         text: "{% trans "This will reset the user password and send a reset mail"%}",
         type: "warning",
         showCancelButton: true,
+        cancelButtonText: "{% trans 'Cancel' %}",
         confirmButtonColor: "#DD6B55",
         confirmButtonText: "{% trans 'Confirm' %}",
         closeOnConfirm: false
@@ -360,6 +409,7 @@ $(document).ready(function() {
         text: "{% trans 'This will reset the user public key and send a reset mail' %}",
         type: "warning",
         showCancelButton: true,
+        cancelButtonText: "{% trans 'Cancel' %}",
         confirmButtonColor: "#DD6B55",
         confirmButtonText: "{% trans 'Confirm' %}",
         closeOnConfirm: false
@@ -394,11 +444,52 @@ $(document).ready(function() {
     APIUpdateAttr({ url: the_url, body: JSON.stringify(body), success: success, error: fail});
 }).on('click', '.btn-delete-user', function () {
     var $this = $(this);
-    var name = "{{ user.name }}";
-    var uid = "{{ user.id }}";
+    var name = "{{ user_object.name }}";
+    var uid = "{{ user_object.id }}";
     var the_url = '{% url "api-users:user-detail" pk=DEFAULT_PK %}'.replace('{{ DEFAULT_PK }}', uid);
     var redirect_url = "{% url 'users:user-list' %}";
     objectDelete($this, name, the_url, redirect_url);
+}).on('click', '#btn-unblock-user', function () {
+    function doReset() {
+        {#var the_url = '{% url "api-users:user-reset-password" pk=user_object.id %}';#}
+        var the_url = '{%  url "api-users:user-unblock" pk=user_object.id %}';
+        var body = {};
+        var success = function() {
+            var msg = "{% trans "Success" %}";
+            {#swal("{% trans 'Unblock user' %}", msg, "success");#}
+            swal({
+                title: "{% trans 'Unblock user' %}",
+                text: msg,
+                type: "success"
+                }, function() {
+                    location.reload()
+                }
+            );
+        };
+        APIUpdateAttr({
+            url: the_url,
+            body: JSON.stringify(body),
+            success: success
+        });
+    }
+    swal({
+        title: "{% trans 'Are you sure?' %}",
+        text: "{% trans "After unlocking the user, the user can log in normally."%}",
+        type: "warning",
+        showCancelButton: true,
+        cancelButtonText: "{% trans 'Cancel' %}",
+        confirmButtonColor: "#DD6B55",
+        confirmButtonText: "{% trans 'Confirm' %}",
+        closeOnConfirm: false
+    }, function() {
+        doReset();
+    });
+}).on('click', '#btn-reset-mfa', function () {
+    APIUpdateAttr({
+        url: "{% url 'api-users:user-reset-otp' pk=user_object.id %}",
+        method: "GET",
+        success_message: "{% trans 'Reset user MFA success' %}"
+    })
 })
 </script>
 {% endblock %}

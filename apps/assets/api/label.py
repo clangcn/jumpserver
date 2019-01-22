@@ -14,10 +14,11 @@
 # limitations under the License.
 
 from rest_framework_bulk import BulkModelViewSet
+from rest_framework.pagination import LimitOffsetPagination
 from django.db.models import Count
 
 from common.utils import get_logger
-from ..hands import IsSuperUser
+from ..hands import IsOrgAdmin
 from ..models import Label
 from .. import serializers
 
@@ -27,12 +28,18 @@ __all__ = ['LabelViewSet']
 
 
 class LabelViewSet(BulkModelViewSet):
-    queryset = Label.objects.annotate(asset_count=Count("assets"))
-    permission_classes = (IsSuperUser,)
+    filter_fields = ("name", "value")
+    search_fields = filter_fields
+    permission_classes = (IsOrgAdmin,)
     serializer_class = serializers.LabelSerializer
+    pagination_class = LimitOffsetPagination
 
     def list(self, request, *args, **kwargs):
         if request.query_params.get("distinct"):
             self.serializer_class = serializers.LabelDistinctSerializer
             self.queryset = self.queryset.values("name").distinct()
         return super().list(request, *args, **kwargs)
+
+    def get_queryset(self):
+        self.queryset = Label.objects.annotate(asset_count=Count("assets"))
+        return self.queryset

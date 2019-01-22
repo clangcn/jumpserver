@@ -3,10 +3,13 @@
 
 {% block help_message %}
     <div class="alert alert-info help-message">
-    系统用户是 Jumpserver跳转登录资产时使用的用户，可以理解为登录资产用户，如 web, sa, dba(`ssh web@some-host`), 而不是使用某个用户的用户名跳转登录服务器(`ssh xiaoming@some-host`);
-    简单来说是 用户使用自己的用户名登录Jumpserver, Jumpserver使用系统用户登录资产。
-    系统用户创建时，如果选择了自动推送 Jumpserver会使用ansible自动推送系统用户到资产中，如果资产(交换机、windows)不支持ansible, 请手动填写账号密码。
-    目前还不支持Windows的自动推送
+{#    系统用户是 Jumpserver跳转登录资产时使用的用户，可以理解为登录资产用户，如 web, sa, dba(`ssh web@some-host`), 而不是使用某个用户的用户名跳转登录服务器(`ssh xiaoming@some-host`);#}
+{#    简单来说是 用户使用自己的用户名登录Jumpserver, Jumpserver使用系统用户登录资产。#}
+{#    系统用户创建时，如果选择了自动推送 Jumpserver会使用ansible自动推送系统用户到资产中，如果资产(交换机、windows)不支持ansible, 请手动填写账号密码。#}
+{#    目前还不支持Windows的自动推送#}
+    {% trans 'System user is Jumpserver jump login assets used by the users, can be understood as the user login assets, such as web, sa, the dba (` ssh web@some-host `), rather than using a user the username login server jump (` ssh xiaoming@some-host `); '%}
+    {% trans 'In simple terms, users log into Jumpserver using their own username, and Jumpserver uses system users to log into assets. '%}
+    {% trans 'When system users are created, if you choose auto push Jumpserver to use ansible push system users into the asset, if the asset (Switch, Windows) does not support ansible, please manually fill in the account password. Automatic push for Windows is not currently supported.' %}
     </div>
 {% endblock %}
 
@@ -25,6 +28,8 @@
         </th>
         <th class="text-center">{% trans 'Name' %}</th>
         <th class="text-center">{% trans 'Username' %}</th>
+        <th class="text-center">{% trans 'Protocol' %}</th>
+        <th class="text-center">{% trans 'Login mode' %}</th>
         <th class="text-center">{% trans 'Asset' %}</th>
         <th class="text-center">{% trans 'Reachable' %}</th>
         <th class="text-center">{% trans 'Unreachable' %}</th>
@@ -47,7 +52,7 @@ function initTable() {
                 var detail_btn = '<a href="{% url "assets:system-user-detail" pk=DEFAULT_PK %}">' + cellData + '</a>';
                 $(td).html(detail_btn.replace('{{ DEFAULT_PK }}', rowData.id));
             }},
-            {targets: 4, createdCell: function (td, cellData) {
+            {targets: 6, createdCell: function (td, cellData) {
                 var innerHtml = "";
                 if (cellData !== 0) {
                     innerHtml = "<span class='text-navy'>" + cellData + "</span>";
@@ -56,7 +61,7 @@ function initTable() {
                 }
                 $(td).html('<span href="javascript:void(0);" data-toggle="tooltip" title="' + cellData +'">' + innerHtml + '</span>');
             }},
-            {targets: 5, createdCell: function (td, cellData) {
+            {targets: 7, createdCell: function (td, cellData) {
                 var innerHtml = "";
                 if (cellData !== 0) {
                     innerHtml = "<span class='text-danger'>" + cellData + "</span>";
@@ -65,7 +70,7 @@ function initTable() {
                 }
                 $(td).html('<span href="javascript:void(0);" data-toggle="tooltip" title="' + cellData + '">' + innerHtml + '</span>');
             }},
-            {targets: 6, createdCell: function (td, cellData, rowData) {
+            {targets: 8, createdCell: function (td, cellData, rowData) {
                 var val = 0;
                 var innerHtml = "";
                 var total = rowData.assets_amount;
@@ -83,19 +88,19 @@ function initTable() {
                 $(td).html('<span href="javascript:void(0);" data-toggle="tooltip" title="' + cellData + '">' + innerHtml + '</span>');
 
             }},
-            {targets: 8, createdCell: function (td, cellData, rowData) {
+            {targets: 10, createdCell: function (td, cellData, rowData) {
                 var update_btn = '<a href="{% url "assets:system-user-update" pk=DEFAULT_PK %}" class="btn btn-xs m-l-xs btn-info">{% trans "Update" %}</a>'.replace('{{ DEFAULT_PK }}', cellData);
                 var del_btn = '<a class="btn btn-xs btn-danger m-l-xs btn_admin_user_delete" data-uid="{{ DEFAULT_PK }}">{% trans "Delete" %}</a>'.replace('{{ DEFAULT_PK }}', cellData);
                 $(td).html(update_btn + del_btn)
             }}],
         ajax_url: '{% url "api-assets:system-user-list" %}',
         columns: [
-            {data: "id" }, {data: "name" }, {data: "username" }, {data: "assets_amount" },
+            {data: "id" }, {data: "name" }, {data: "username" }, {data: "protocol"}, {data: "login_mode_display"}, {data: "assets_amount" },
             {data: "reachable_amount"}, {data: "unreachable_amount"}, {data: "id"}, {data: "comment" }, {data: "id" }
         ],
         op_html: $('#actions').html()
         };
-    jumpserver.initDataTable(options);
+    jumpserver.initServerSideDataTable(options);
 }
 
 $(document).ready(function(){
@@ -133,6 +138,7 @@ $(document).ready(function(){
             text: "{% trans 'This will delete the selected System Users !!!' %}",
             type: "warning",
             showCancelButton: true,
+            cancelButtonText: "{% trans 'Cancel' %}",
             confirmButtonColor: "#DD6B55",
             confirmButtonText: "{% trans 'Confirm' %}",
             closeOnConfirm: false

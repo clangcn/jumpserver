@@ -1,7 +1,6 @@
 # ~*~ coding: utf-8 ~*~
 
 from __future__ import unicode_literals
-from django import forms
 from django.utils.translation import ugettext as _
 from django.urls import reverse_lazy
 from django.views.generic.base import TemplateView
@@ -11,8 +10,9 @@ from django.contrib.messages.views import SuccessMessageMixin
 
 from common.utils import get_logger
 from common.const import create_success_msg, update_success_msg
+from common.permissions import AdminUserRequiredMixin
+from orgs.utils import current_org
 from ..models import User, UserGroup
-from ..utils import AdminUserRequiredMixin
 from .. import forms
 
 __all__ = ['UserGroupListView', 'UserGroupCreateView', 'UserGroupDetailView',
@@ -56,13 +56,10 @@ class UserGroupUpdateView(AdminUserRequiredMixin, SuccessMessageMixin, UpdateVie
     success_message = update_success_msg
 
     def get_context_data(self, **kwargs):
-        users = User.objects.all()
-        group_users = [user.id for user in self.object.users.all()]
         context = {
             'app': _('Users'),
             'action': _('Update user group'),
-            'users': users,
-            'group_users': group_users
+
         }
         kwargs.update(context)
         return super().get_context_data(**kwargs)
@@ -74,7 +71,7 @@ class UserGroupDetailView(AdminUserRequiredMixin, DetailView):
     template_name = 'users/user_group_detail.html'
 
     def get_context_data(self, **kwargs):
-        users = User.objects.exclude(id__in=self.object.users.all())
+        users = current_org.get_org_users().exclude(id__in=self.object.users.all())
         context = {
             'app': _('Users'),
             'action': _('User group detail'),

@@ -8,7 +8,8 @@ import codecs
 import chardet
 from io import StringIO
 
-from django.conf import settings
+from django.db import transaction
+from django.contrib import messages
 from django.utils.translation import ugettext_lazy as _
 from django.views.generic import TemplateView, ListView, View
 from django.views.generic.edit import CreateView, DeleteView, FormView, UpdateView
@@ -24,11 +25,12 @@ from django.shortcuts import redirect
 from django.contrib.messages.views import SuccessMessageMixin
 
 from common.mixins import JSONResponseMixin
-from common.utils import get_object_or_none, get_logger, is_uuid
+from common.utils import get_object_or_none, get_logger
+from common.permissions import AdminUserRequiredMixin
 from common.const import create_success_msg, update_success_msg
+from orgs.utils import current_org
 from .. import forms
-from ..models import Asset, AssetGroup, AdminUser, Cluster, SystemUser, Label, Node
-from ..hands import AdminUserRequiredMixin
+from ..models import Asset, AdminUser, SystemUser, Label, Node, Domain
 
 
 __all__ = [
@@ -48,6 +50,7 @@ class AssetListView(AdminUserRequiredMixin, TemplateView):
             'app': _('Assets'),
             'action': _('Asset list'),
             'labels': Label.objects.all().order_by('name'),
+            'nodes': Node.objects.all().order_by('-key'),
         }
         kwargs.update(context)
         return super().get_context_data(**kwargs)
@@ -71,14 +74,6 @@ class AssetCreateView(AdminUserRequiredMixin, SuccessMessageMixin, CreateView):
     template_name = 'assets/asset_create.html'
     success_url = reverse_lazy('assets:asset-list')
 
-    # def form_valid(self, form):
-    #     print("form valid")
-    #     asset = form.save()
-    #     asset.created_by = self.request.user.username or 'Admin'
-    #     asset.date_created = timezone.now()
-    #     asset.save()
-    #     return super().form_valid(form)
-
     def get_form(self, form_class=None):
         form = super().get_form(form_class=form_class)
         node_id = self.request.GET.get("node_id")
@@ -101,29 +96,12 @@ class AssetCreateView(AdminUserRequiredMixin, SuccessMessageMixin, CreateView):
         return create_success_msg % ({"name": cleaned_data["hostname"]})
 
 
-# class AssetModalListView(AdminUserRequiredMixin, ListView):
-#     paginate_by = settings.DISPLAY_PER_PAGE
-#     model = Asset
-#     context_object_name = 'asset_modal_list'
-#     template_name = 'assets/_asset_list_modal.html'
-#
-#     def get_context_data(self, **kwargs):
-#         assets = Asset.objects.all()
-#         assets_id = self.request.GET.get('assets_id', '')
-#         assets_id_list = [i for i in assets_id.split(',') if i.isdigit()]
-#         context = {
-#             'all_assets': assets_id_list,
-#             'assets': assets
-#         }
-#         kwargs.update(context)
-#         return super().get_context_data(**kwargs)
-
-
 class AssetBulkUpdateView(AdminUserRequiredMixin, ListView):
     model = Asset
     form_class = forms.AssetBulkUpdateForm
     template_name = 'assets/asset_bulk_update.html'
     success_url = reverse_lazy('assets:asset-list')
+    success_message = _("Bulk update asset success")
     id_list = None
     form = None
 
@@ -145,6 +123,7 @@ class AssetBulkUpdateView(AdminUserRequiredMixin, ListView):
         form = self.form_class(request.POST)
         if form.is_valid():
             form.save()
+            messages.success(request, self.success_message)
             return redirect(self.success_url)
         else:
             return self.get(request, form=form, *args, **kwargs)
@@ -184,7 +163,7 @@ class AssetDeleteView(AdminUserRequiredMixin, DeleteView):
     success_url = reverse_lazy('assets:asset-list')
 
 
-class AssetDetailView(DetailView):
+class AssetDetailView(LoginRequiredMixin, DetailView):
     model = Asset
     context_object_name = 'asset'
     template_name = 'assets/asset_detail.html'
@@ -201,7 +180,7 @@ class AssetDetailView(DetailView):
 
 
 @method_decorator(csrf_exempt, name='dispatch')
-class AssetExportView(View):
+class AssetExportView(LoginRequiredMixin, View):
     def get(self, request):
         spm = request.GET.get('spm', '')
         assets_id_default = [Asset.objects.first().id] if Asset.objects.first() else []
@@ -209,7 +188,7 @@ class AssetExportView(View):
         fields = [
             field for field in Asset._meta.fields
             if field.name not in [
-                'date_created'
+                'date_created', 'org_id'
             ]
         ]
         filename = 'assets-{}.csv'.format(
@@ -232,8 +211,16 @@ class AssetExportView(View):
     def post(self, request, *args, **kwargs):
         try:
             assets_id = json.loads(request.body).get('assets_id', [])
+            node_id = json.loads(request.body).get('node_id', None)
         except ValueError:
             return HttpResponse('Json object not valid', status=400)
+
+        if not assets_id:
+            node = get_object_or_none(Node, id=node_id) if node_id else Node.root()
+            assets = node.get_all_assets()
+            for asset in assets:
+                assets_id.append(asset.id)
+
         spm = uuid.uuid4().hex
         cache.set(spm, assets_id, 300)
         url = reverse_lazy('assets:asset-export') + '?spm=%s' % spm
@@ -244,6 +231,8 @@ class BulkImportAssetView(AdminUserRequiredMixin, JSONResponseMixin, FormView):
     form_class = forms.FileForm
 
     def form_valid(self, form):
+        node_id = self.request.GET.get("node_id")
+        node = get_object_or_none(Node, id=node_id) if node_id else Node.root()
         f = form.cleaned_data['file']
         det_result = chardet.detect(f.read())
         f.seek(0)  # reset file seek index
@@ -273,35 +262,45 @@ class BulkImportAssetView(AdminUserRequiredMixin, JSONResponseMixin, FormView):
             if set(row) == {''}:
                 continue
 
-            asset_dict = dict(zip(attr, row))
-            id_ = asset_dict.pop('id', 0)
-            for k, v in asset_dict.items():
+            asset_dict_raw = dict(zip(attr, row))
+            asset_dict = dict()
+            for k, v in asset_dict_raw.items():
+                v = v.strip()
                 if k == 'is_active':
-                    v = True if v in ['TRUE', 1, 'true'] else False
+                    v = False if v in ['False', 0, 'false'] else True
                 elif k == 'admin_user':
                     v = get_object_or_none(AdminUser, name=v)
                 elif k in ['port', 'cpu_count', 'cpu_cores']:
                     try:
                         v = int(v)
                     except ValueError:
-                        v = 0
-                else:
-                    continue
-                asset_dict[k] = v
+                        v = ''
+                elif k == 'domain':
+                    v = get_object_or_none(Domain, name=v)
+                elif k == 'platform':
+                    v = v.lower().capitalize()
+                if v != '':
+                    asset_dict[k] = v
 
-            asset = get_object_or_none(Asset, id=id_) if is_uuid(id_) else None
+            asset = None
+            asset_id = asset_dict.pop('id', None)
+            if asset_id:
+                asset = get_object_or_none(Asset, id=asset_id)
             if not asset:
                 try:
                     if len(Asset.objects.filter(hostname=asset_dict.get('hostname'))):
                         raise Exception(_('already exists'))
-                    asset = Asset.objects.create(**asset_dict)
-                    created.append(asset_dict['hostname'])
-                    assets.append(asset)
+                    with transaction.atomic():
+                        asset = Asset.objects.create(**asset_dict)
+                        if node:
+                            asset.nodes.set([node])
+                        created.append(asset_dict['hostname'])
+                        assets.append(asset)
                 except Exception as e:
                     failed.append('%s: %s' % (asset_dict['hostname'], str(e)))
             else:
                 for k, v in asset_dict.items():
-                    if v:
+                    if v != '':
                         setattr(asset, k, v)
                 try:
                     asset.save()

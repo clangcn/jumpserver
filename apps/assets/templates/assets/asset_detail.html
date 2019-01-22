@@ -70,8 +70,16 @@
                                             <td><b>{{ asset.port }}</b></td>
                                         </tr>
                                         <tr>
+                                            <td>{% trans 'Protocol' %}:</td>
+                                            <td><b>{{ asset.protocol }}</b></td>
+                                        </tr>
+                                        <tr>
                                             <td>{% trans 'Admin user' %}:</td>
                                             <td><b>{{ asset.admin_user }}</b></td>
+                                        </tr>
+                                        <tr>
+                                            <td>{% trans 'Domain' %}:</td>
+                                            <td><b>{{ asset.domain|default:"" }}</b></td>
                                         </tr>
                                         <tr>
                                             <td>{% trans 'Vendor' %}:</td>
@@ -130,7 +138,7 @@
                                 </div>
                             </div>
                         </div>
-                        {% if user.is_superuser %}
+                        {% if user.is_superuser or user.is_org_admin %}
                         <div class="col-sm-5" style="padding-left: 0;padding-right: 0">
                             <div class="panel panel-primary">
                                 <div class="panel-heading">
@@ -155,7 +163,7 @@
                                               </span>
                                           </td>
                                         </tr>
-                                        {% if asset.is_unixlike %}
+                                        {% if asset.protocol == 'ssh' %}
                                         <tr>
                                             <td>{% trans 'Refresh hardware' %}:</td>
                                             <td>
@@ -190,7 +198,7 @@
                                                 <td colspan="2" class="no-borders">
                                                     <select data-placeholder="{% trans 'Nodes' %}" id="groups_selected" class="select2 groups" style="width: 100%" multiple="" tabindex="4">
                                                         {% for node in nodes_remain %}
-                                                        <option value="{{ node.id }}" id="opt_{{ node.id }}" >{{ node.name }}</option>
+                                                        <option value="{{ node.id }}" id="opt_{{ node.id }}" >{{ node }}</option>
                                                         {% endfor %}
                                                     </select>
                                                 </td>
@@ -204,7 +212,7 @@
 
                                         {% for node in asset.nodes.all %}
                                         <tr>
-                                          <td ><b class="bdg_node" data-gid={{ node.id }}>{{ node.name }}</b></td>
+                                          <td ><b class="bdg_node" data-gid={{ node.id }}>{{ node }}</b></td>
                                           <td>
                                               <button class="btn btn-danger pull-right btn-xs btn-leave-node" type="button"><i class="fa fa-minus"></i></button>
                                           </td>
@@ -269,16 +277,15 @@ function updateAssetNodes(nodes) {
 
 function refreshAssetHardware() {
     var the_url = "{% url 'api-assets:asset-refresh' pk=asset.id %}";
-    var success = function (data) {
-        location.reload();
-    };
-    var error = function (data) {
-        alert(data)
+    var success = function(data) {
+        console.log(data);
+        var task_id = data.task;
+        var url = '{% url "ops:celery-task-log" pk=DEFAULT_PK %}'.replace("{{ DEFAULT_PK }}", task_id);
+        window.open(url, '', 'width=800,height=600')
     };
     APIUpdateAttr({
         url: the_url,
         success: success,
-        error: error,
         method: 'GET'
     });
 }
@@ -306,9 +313,9 @@ $(document).ready(function () {
         success_message: success
     });
     if (status === "False") {
-            $(".ibox-content > table > tbody > tr:nth-child(13) > td:last >b").html('True');
+        $(".ibox-content > table > tbody > tr:nth-child(13) > td:last >b").html('True');
     }else{
-            $(".ibox-content > table > tbody > tr:nth-child(13) > td:last >b").html('False');
+        $(".ibox-content > table > tbody > tr:nth-child(13) > td:last >b").html('False');
     }
 }).on('click', '#btn-update-nodes', function () {
     if (Object.keys(jumpserver.nodes_selected).length === 0) {
@@ -344,19 +351,20 @@ $(document).ready(function () {
     var redirect_url = "{% url 'assets:asset-list' %}";
     objectDelete($this, name, the_url, redirect_url);
 }).on('click', '#btn_refresh_asset', function () {
-    alert('关闭alert, 等待完成, 自动刷新页面');
     refreshAssetHardware()
 }).on('click', '#btn-test-is-alive', function () {
     var the_url = "{% url 'api-assets:asset-alive-test' pk=asset.id %}";
-    var error = function (data) {
-        alert(data)
+
+    var success = function(data) {
+        var task_id = data.task;
+        var url = '{% url "ops:celery-task-log" pk=DEFAULT_PK %}'.replace("{{ DEFAULT_PK }}", task_id);
+        window.open(url, '', 'width=800,height=600')
     };
-    alert('关闭alert, 等待完成');
+
     APIUpdateAttr({
         url: the_url,
-        error: error,
         method: 'GET',
-        success_message: "{% trans "Reachable" %}"
+        success: success
     });
 })
 

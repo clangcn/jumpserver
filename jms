@@ -26,10 +26,10 @@ LOG_DIR = os.path.join(BASE_DIR, 'logs')
 TMP_DIR = os.path.join(BASE_DIR, 'tmp')
 HTTP_HOST = CONFIG.HTTP_BIND_HOST or '127.0.0.1'
 HTTP_PORT = CONFIG.HTTP_LISTEN_PORT or 8080
-DEBUG = CONFIG.DEBUG
-LOG_LEVEL = CONFIG.LOG_LEVEL
+DEBUG = CONFIG.DEBUG or False
+LOG_LEVEL = CONFIG.LOG_LEVEL or 'INFO'
 
-START_TIMEOUT = 15
+START_TIMEOUT = 40
 WORKERS = 4
 DAEMON = False
 
@@ -42,10 +42,23 @@ try:
 except:
     pass
 
+def check_database_connection():
+    os.chdir(os.path.join(BASE_DIR, 'apps'))
+    for i in range(60):
+        print("Check database connection ...")
+        code = subprocess.call("python manage.py showmigrations users ", shell=True)
+        if code == 0:
+            print("Database connect success")
+            return
+        time.sleep(1)
+    print("Connection database failed, exist")
+    sys.exit(10)
+
 
 def make_migrations():
     print("Check database structure change ...")
     os.chdir(os.path.join(BASE_DIR, 'apps'))
+    print("Migrate model change to database ...")
     subprocess.call('python3 manage.py migrate', shell=True)
 
 
@@ -56,6 +69,7 @@ def collect_static():
 
 
 def prepare():
+    check_database_connection()
     make_migrations()
     collect_static()
 
@@ -82,7 +96,10 @@ def get_pid(service):
     pid_file = get_pid_file_path(service)
     if os.path.isfile(pid_file):
         with open(pid_file) as f:
-            return int(f.read().strip())
+            try:
+                return int(f.read().strip())
+            except ValueError:
+                return 0
     return 0
 
 
@@ -109,7 +126,6 @@ def parse_service(s):
 
 def start_gunicorn():
     print("\n- Start Gunicorn WSGI HTTP Server")
-    prepare()
     service = 'gunicorn'
     bind = '{}:{}'.format(HTTP_HOST, HTTP_PORT)
     log_format = '%(h)s %(t)s "%(r)s" %(s)s %(b)s '
@@ -119,7 +135,11 @@ def start_gunicorn():
     cmd = [
         'gunicorn', 'jumpserver.wsgi',
         '-b', bind,
+        #'-k', 'eventlet',
+        '-k', 'gthread',
+        '--threads', '10',
         '-w', str(WORKERS),
+        '--max-requests', '4096',
         '--access-logformat', log_format,
         '-p', pid_file,
     ]
@@ -152,10 +172,10 @@ def start_celery():
 
     cmd = [
         'celery', 'worker',
-        '-A',  'common',
+        '-A',  'ops',
         '-l', LOG_LEVEL.lower(),
         '--pidfile', pid_file,
-        '-c', str(WORKERS),
+        '--autoscale', '20,4',
     ]
     if DAEMON:
         cmd.extend([
@@ -179,7 +199,7 @@ def start_beat():
     scheduler = "django_celery_beat.schedulers:DatabaseScheduler"
     cmd = [
         'celery',  'beat',
-        '-A', 'common',
+        '-A', 'ops',
         '--pidfile', pid_file,
         '-l', LOG_LEVEL,
         '--scheduler', scheduler,
@@ -198,6 +218,7 @@ def start_service(s):
     print(time.ctime())
     print('Jumpserver version {}, more see https://www.jumpserver.org'.format(
         __version__))
+    prepare()
 
     services_handler = {
          "gunicorn": start_gunicorn,
@@ -282,9 +303,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="""
         Jumpserver service control tools;
-        
-        Example: \r\n 
-        
+
+        Example: \r\n
+
         %(prog)s start all -d;
         """
     )

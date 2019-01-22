@@ -3,12 +3,13 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from ..models import AdminUser, SystemUser
 from common.utils import validate_ssh_private_key, ssh_pubkey_gen, get_logger
+from orgs.mixins import OrgModelForm
+from ..models import AdminUser, SystemUser
 
 logger = get_logger(__file__)
 __all__ = [
-    'FileForm', 'SystemUserForm', 'AdminUserForm',
+    'FileForm', 'SystemUserForm', 'AdminUserForm', 'PasswordAndKeyAuthForm',
 ]
 
 
@@ -79,13 +80,9 @@ class AdminUserForm(PasswordAndKeyAuthForm):
             'name': forms.TextInput(attrs={'placeholder': _('Name')}),
             'username': forms.TextInput(attrs={'placeholder': _('Username')}),
         }
-        help_texts = {
-            'name': '* required',
-            'username': '* required',
-        }
 
 
-class SystemUserForm(PasswordAndKeyAuthForm):
+class SystemUserForm(OrgModelForm, PasswordAndKeyAuthForm):
     # Admin user assets define, let user select, save it in form not in view
     auto_generate_key = forms.BooleanField(initial=True, required=False)
 
@@ -93,14 +90,26 @@ class SystemUserForm(PasswordAndKeyAuthForm):
         # Because we define custom field, so we need rewrite :method: `save`
         system_user = super().save()
         password = self.cleaned_data.get('password', '') or None
+        login_mode = self.cleaned_data.get('login_mode', '') or None
+        protocol = self.cleaned_data.get('protocol') or None
         auto_generate_key = self.cleaned_data.get('auto_generate_key', False)
         private_key, public_key = super().gen_keys()
+
+        if login_mode == SystemUser.LOGIN_MANUAL or \
+                protocol in [SystemUser.PROTOCOL_RDP,
+                             SystemUser.PROTOCOL_TELNET,
+                             SystemUser.PROTOCOL_VNC]:
+            system_user.auto_push = 0
+            auto_generate_key = False
+            system_user.save()
 
         if auto_generate_key:
             logger.info('Auto generate key and set system user auth')
             system_user.auto_gen_auth()
         else:
-            system_user.set_auth(password=password, private_key=private_key, public_key=public_key)
+            system_user.set_auth(password=password, private_key=private_key,
+                                 public_key=public_key)
+
         return system_user
 
     def clean(self):
@@ -109,20 +118,37 @@ class SystemUserForm(PasswordAndKeyAuthForm):
         if not self.instance and not auto_generate:
             super().validate_password_key()
 
+    def clean_username(self):
+        username = self.data.get('username')
+        login_mode = self.data.get('login_mode')
+        protocol = self.data.get('protocol')
+
+        if username:
+            return username
+        if login_mode == SystemUser.LOGIN_AUTO and \
+                protocol != SystemUser.PROTOCOL_VNC:
+            msg = _('* Automatic login mode must fill in the username.')
+            raise forms.ValidationError(msg)
+        return username
+
     class Meta:
         model = SystemUser
         fields = [
             'name', 'username', 'protocol', 'auto_generate_key',
             'password', 'private_key_file', 'auto_push', 'sudo',
-            'comment', 'shell', 'priority',
+            'comment', 'shell', 'priority', 'login_mode', 'cmd_filters',
         ]
         widgets = {
             'name': forms.TextInput(attrs={'placeholder': _('Name')}),
             'username': forms.TextInput(attrs={'placeholder': _('Username')}),
+            'cmd_filters': forms.SelectMultiple(attrs={
+                'class': 'select2', 'data-placeholder': _('Command filter')
+            }),
         }
         help_texts = {
-            'name': '* required',
-            'username': '* required',
             'auto_push': _('Auto push system user to asset'),
-            'priority': _('High level will be using login asset as default, if user was granted more than 2 system user'),
+            'priority': _('1-100, High level will be using login asset as default, '
+                          'if user was granted more than 2 system user'),
+            'login_mode': _('If you choose manual login mode, you do not '
+                            'need to fill in the username and password.')
         }
